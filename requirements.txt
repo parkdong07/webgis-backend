@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+asyncpg
+databases
+geopandas
+psycopg2-binary
+sqlalchemy
+geoalchemy2
+python-multipart
+python-dotenv
+shutil
+gunicorn

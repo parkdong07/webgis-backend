@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>WebGIS Platform</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg:#0d1117; --panel:#161b22; --border:#30363d;
+      --accent:#00e5a0; --text:#e6edf3; --muted:#8b949e;
+      --danger:#f85149; --warn:#ffd93d; --panel-w:330px;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:'IBM Plex Sans Thai',sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+    header{height:52px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:16px;z-index:1000;flex-shrink:0;}
+    .logo{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:600;color:var(--accent);letter-spacing:.05em;}
+    .logo span{color:var(--muted);}
+    .header-right{margin-left:auto;display:flex;gap:10px;align-items:center;}
+    .status-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 6px var(--accent);animation:pulse 2s infinite;}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+    .status-text{font-size:12px;color:var(--muted);}
+    .main{display:flex;flex:1;overflow:hidden;}
+    .sidebar{width:var(--panel-w);background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;}
+    .sidebar-tabs{display:flex;border-bottom:1px solid var(--border);}
+    .tab-btn{flex:1;padding:9px 4px;font-size:11px;font-family:inherit;background:none;border:none;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;}
+    .tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
+    .tab-content{display:none;flex:1;overflow-y:auto;padding:14px;flex-direction:column;gap:10px;}
+    .tab-content.active{display:flex;}
+    .section-title{font-size:11px;font-weight:600;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:4px;}
+    .layer-card{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:8px;transition:border-color .2s;}
+    .layer-card:hover{border-color:var(--accent);}
+    .layer-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+    .layer-info{flex:1;min-width:0;}
+    .layer-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .layer-count{font-size:11px;color:var(--muted);}
+    .layer-actions{display:flex;gap:4px;flex-shrink:0;}
+    .icon-btn{width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all .2s;}
+    .icon-btn:hover{border-color:var(--accent);color:var(--accent);}
+    .icon-btn.danger:hover{border-color:var(--danger);color:var(--danger);}
+    .toggle-switch{width:34px;height:18px;background:var(--border);border-radius:9px;position:relative;cursor:pointer;transition:background .2s;flex-shrink:0;}
+    .toggle-switch.on{background:var(--accent);}
+    .toggle-switch::after{content:'';position:absolute;width:12px;height:12px;background:white;border-radius:50%;top:3px;left:3px;transition:transform .2s;}
+    .toggle-switch.on::after{transform:translateX(16px);}
+    .form-group{display:flex;flex-direction:column;gap:4px;}
+    label{font-size:11px;color:var(--muted);}
+    input,select,textarea{background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;padding:7px 10px;outline:none;transition:border-color .2s;width:100%;}
+    input:focus,select:focus,textarea:focus{border-color:var(--accent);}
+    textarea{resize:vertical;min-height:70px;}
+    .btn{padding:8px 16px;border-radius:6px;border:none;font-family:inherit;font-size:13px;cursor:pointer;transition:opacity .2s;}
+    .btn:hover{opacity:.85;}
+    .btn-primary{background:var(--accent);color:#000;font-weight:600;}
+    .btn-secondary{background:var(--border);color:var(--text);}
+    .btn-danger{background:var(--danger);color:white;}
+    .btn-warn{background:var(--warn);color:#000;font-weight:600;}
+    .btn-full{width:100%;}
+    .results-box{background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden;font-size:12px;}
+    .results-box table{width:100%;border-collapse:collapse;}
+    .results-box th{background:var(--panel);padding:7px 10px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);}
+    .results-box td{padding:5px 10px;border-bottom:1px solid var(--border);font-family:'JetBrains Mono',monospace;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .results-box tr:last-child td{border-bottom:none;}
+    .results-box tr:hover td{background:rgba(255,255,255,.04);cursor:pointer;}
+    .upload-area{border:2px dashed var(--border);border-radius:8px;padding:20px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;}
+    .upload-area:hover{border-color:var(--accent);background:rgba(0,229,160,.04);}
+    .upload-icon{font-size:26px;margin-bottom:6px;}
+    .upload-text{font-size:12px;color:var(--muted);}
+    #map{flex:1;position:relative;}
+    .map-toolbar{position:absolute;top:14px;left:14px;z-index:900;display:flex;gap:6px;flex-wrap:wrap;max-width:200px;}
+    .tool-btn{width:36px;height:36px;background:var(--panel);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;}
+    .tool-btn:hover,.tool-btn.active{border-color:var(--accent);color:var(--accent);}
+    .coords-bar{position:absolute;bottom:10px;right:10px;z-index:900;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);}
+    .leaflet-popup-content-wrapper{background:var(--panel)!important;border:1px solid var(--border)!important;border-radius:10px!important;color:var(--text)!important;box-shadow:0 8px 32px rgba(0,0,0,.5)!important;min-width:220px;}
+    .leaflet-popup-tip{background:var(--panel)!important;}
+    .popup-title{font-weight:600;font-size:13px;margin-bottom:8px;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:6px;}
+    .popup-row{display:flex;justify-content:space-between;gap:12px;font-size:11px;margin-bottom:3px;}
+    .popup-key{color:var(--muted);flex-shrink:0;}
+    .popup-val{font-family:'JetBrains Mono',monospace;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px;}
+    .popup-actions{display:flex;gap:6px;margin-top:10px;border-top:1px solid var(--border);padding-top:8px;}
+    .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(40px);background:var(--panel);border:1px solid var(--accent);border-radius:8px;padding:10px 20px;font-size:13px;z-index:9999;transition:transform .3s;pointer-events:none;}
+    .toast.show{transform:translateX(-50%) translateY(0);}
+    .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:5000;align-items:center;justify-content:center;}
+    .modal-overlay.show{display:flex;}
+    .modal{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:24px;width:440px;max-width:95vw;max-height:80vh;overflow-y:auto;}
+    .modal-title{font-size:15px;font-weight:600;margin-bottom:16px;color:var(--accent);}
+    .modal-actions{display:flex;gap:8px;margin-top:16px;justify-content:flex-end;}
+    .edit-row{display:flex;flex-direction:column;gap:3px;margin-bottom:10px;}
+    .edit-row label{font-size:11px;color:var(--muted);}
+    .style-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+    .style-row label{font-size:11px;color:var(--muted);width:80px;flex-shrink:0;}
+    input[type=color]{width:36px;height:28px;padding:2px;border-radius:4px;cursor:pointer;}
+    input[type=range]{flex:1;}
+    ::-webkit-scrollbar{width:4px;}
+    ::-webkit-scrollbar-track{background:transparent;}
+    ::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">GEO<span>/</span>PLATFORM</div>
+  <div class="header-right">
+    <div class="status-dot"></div>
+    <span class="status-text" id="db-status">กำลังเชื่อมต่อ...</span>
+  </div>
+</header>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-tabs">
+      <button class="tab-btn active" onclick="switchTab('layers',this)">🗂 Layers</button>
+      <button class="tab-btn" onclick="switchTab('query',this)">🔍 Query</button>
+      <button class="tab-btn" onclick="switchTab('style',this)">🎨 Style</button>
+      <button class="tab-btn" onclick="switchTab('upload',this)">⬆ Upload</button>
+    </div>
+
+    <div class="tab-content active" id="tab-layers">
+      <div class="section-title">Base Map</div>
+      <select id="basemap-select" onchange="changeBasemap(this.value)">
+        <option value="dark">CartoDB Dark</option>
+        <option value="osm">OpenStreetMap</option>
+        <option value="satellite">Esri Satellite</option>
+        <option value="topo">OpenTopoMap</option>
+      </select>
+      <div class="section-title" style="margin-top:8px">Vector Layers</div>
+      <div id="layer-list"><div style="font-size:12px;color:var(--muted);text-align:center;padding:20px">กำลังโหลด...</div></div>
+      <button class="btn btn-secondary btn-full" onclick="loadLayers()">🔄 Refresh</button>
+    </div>
+
+    <div class="tab-content" id="tab-query">
+      <div class="section-title">Query Builder</div>
+      <div class="form-group">
+        <label>Layer</label>
+        <select id="q-table" onchange="loadQueryColumns()"></select>
+      </div>
+      <div style="display:flex; gap:6px;">
+        <div class="form-group" style="flex:1">
+          <label>Field</label>
+          <select id="q-col"></select>
+        </div>
+        <div class="form-group" style="width:70px">
+          <label>Operator</label>
+          <select id="q-op">
+            <option value="=">=</option>
+            <option value=">">></option>
+            <option value="<"><</option>
+            <option value="LIKE">LIKE</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Value</label>
+        <input type="text" id="q-val" placeholder="เช่น Bangkok หรือ 1000"/>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="runSafeQuery()">▶ ค้นหา</button>
+
+      <div class="section-title" style="margin-top:10px">Buffer Analysis</div>
+      <div class="form-group">
+        <label>Radius (เมตร)</label>
+        <input type="number" id="buf-radius" value="1000"/>
+      </div>
+      <button class="btn btn-secondary btn-full" onclick="startBuffer()">📍 คลิกแผนที่เพื่อทำ Buffer</button>
+      <div id="query-results"></div>
+    </div>
+
+    <div class="tab-content" id="tab-style">
+      <div class="section-title">Layer Style</div>
+      <div class="form-group">
+        <label>Layer</label>
+        <select id="style-layer" onchange="loadStyleOptions()"></select>
+      </div>
+      <div class="style-row">
+        <label>Fill Color</label>
+        <input type="color" id="s-fill" value="#00e5a0" onchange="applyStyle()"/>
+      </div>
+      <div class="style-row">
+        <label>Stroke Color</label>
+        <input type="color" id="s-stroke" value="#00e5a0" onchange="applyStyle()"/>
+      </div>
+      <div class="style-row">
+        <label>Opacity</label>
+        <input type="range" id="s-opacity" min="0" max="1" step="0.05" value="0.4" oninput="applyStyle()"/>
+        <span id="s-opacity-val" style="font-size:11px;width:30px">0.4</span>
+      </div>
+      <div class="style-row">
+        <label>Weight</label>
+        <input type="range" id="s-weight" min="0.5" max="6" step="0.5" value="1.5" oninput="applyStyle()"/>
+        <span id="s-weight-val" style="font-size:11px;width:30px">1.5</span>
+      </div>
+      <div class="section-title" style="margin-top:10px">Style ตาม Attribute</div>
+      <div class="form-group">
+        <label>Column</label>
+        <select id="s-attr-col"></select>
+      </div>
+      <button class="btn btn-secondary btn-full" onclick="applyAttrStyle()">🎨 Categorize by Column</button>
+    </div>
+
+    <div class="tab-content" id="tab-upload">
+      <div class="section-title">Upload File</div>
+      <div class="upload-area" onclick="document.getElementById('upload-file').click()">
+        <div class="upload-icon">📂</div>
+        <div class="upload-text">คลิกเพื่อเลือกไฟล์<br><small>(รองรับ .zip ที่มี Shapefile หรือ .geojson)</small></div>
+      </div>
+      <input type="file" id="upload-file" accept=".zip,.geojson,.json" style="display:none" onchange="handleFileSelect(event)"/>
+      <div id="selected-file-name" style="margin-top:5px; font-size:12px; color:var(--accent);"></div>
+      
+      <div class="form-group">
+        <label>หมายเหตุ: ชื่อตารางจะตั้งตามชื่อไฟล์</label>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="performUpload()">⬆ อัปโหลดไฟล์</button>
+
+      <div class="section-title" style="margin-top:20px">Export Layer</div>
+      <div class="form-group"><select id="export-layer"></select></div>
+      <button class="btn btn-primary btn-full" onclick="exportShapefile()">⬇ Download Shapefile (.zip)</button>
+    </div>
+  </div>
+
+  <div id="map">
+    <div class="map-toolbar">
+      <button class="tool-btn" onclick="map.zoomIn()" title="Zoom In">+</button>
+      <button class="tool-btn" onclick="map.zoomOut()" title="Zoom Out">−</button>
+      <button class="tool-btn" onclick="fitThailand()" title="ไทย">🇹🇭</button>
+      <button class="tool-btn" onclick="clearTempLayers()" title="ล้าง">🗑</button>
+    </div>
+    <div class="coords-bar" id="coords">Lat: — | Lng: —</div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="addfield-modal">
+  <div class="modal" style="width:360px">
+    <div class="modal-title">➕ เพิ่ม Field ใหม่</div>
+    <div class="edit-row">
+      <label>Table</label>
+      <input type="text" id="af-table" readonly style="opacity:.6"/>
+    </div>
+    <div class="edit-row">
+      <label>ชื่อ Field (ภาษาอังกฤษ)</label>
+      <input type="text" id="af-name" placeholder="เช่น land_use"/>
+    </div>
+    <div class="edit-row">
+      <label>ประเภทข้อมูล</label>
+      <select id="af-type">
+        <option value="text">Text — ข้อความ</option>
+        <option value="integer">Integer — จำนวนเต็ม</option>
+        <option value="float">Float — ทศนิยม</option>
+        <option value="date">Date — วันที่</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeAddFieldModal()">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="submitAddField()">➕ เพิ่ม Field</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// --- CONFIGURATION ---
+const API_BASE = '/api'; // ใช้ path นี้เพื่อให้ตรงกับ Python
+
+// --- MAP INIT ---
+const map = L.map('map',{center:[13,101],zoom:6,zoomControl:false});
+const basemaps = {
+  osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OSM'}),
+  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'© Esri'}),
+  dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'© CartoDB'}),
+  topo: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{attribution:'© OpenTopoMap'})
+};
+basemaps.dark.addTo(map);
+
+// --- GLOBAL VARIABLES ---
+let activeLayers = {};
+let layerColors  = {};
+let tempLayers   = [];
+let bufferLayers = [];
+let pendingFile  = null;
+let bufferMode   = false;
+
+// --- COORDS ---
+map.on('mousemove', e => {
+  document.getElementById('coords').textContent =
+    `Lat: ${e.latlng.lat.toFixed(5)} | Lng: ${e.latlng.lng.toFixed(5)}`;
+});
+
+// --- HELPER FUNCTIONS ---
+function toast(msg, dur=2800) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), dur);
+}
+function escapeHTML(str) {
+  if (str == null) return '';
+  return String(str).replace(/[&<>'"]/g, match => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+  })[match]);
+}
+
+// --- TAB SWITCHING ---
+function switchTab(tab, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-'+tab).classList.add('active');
+}
+
+function changeBasemap(key) {
+  Object.values(basemaps).forEach(b => map.removeLayer(b));
+  basemaps[key].addTo(map);
+  Object.values(activeLayers).forEach(l => l.addTo(map));
+}
+
+// --- LAYER MANAGEMENT ---
+const COLORS = ['#00e5a0','#ff6b6b','#ffd93d','#4ecdc4','#a855f7','#f97316','#06b6d4','#ec4899'];
+
+async function loadLayers() {
+  try {
+    const res = await fetch(`${API_BASE}/layers`);
+    if (!res.ok) throw new Error('API Error');
+    const data = await res.json();
+    renderLayerList(data);
+    populateSelects(data);
+    document.getElementById('db-status').textContent = 'Online ✓';
+    document.getElementById('db-status').style.color = '#00e5a0';
+  } catch(e) {
+    document.getElementById('db-status').textContent = 'Offline';
+    document.getElementById('db-status').style.color = '#f85149';
+    console.error(e);
+  }
+}
+
+function renderLayerList(layers) {
+  const el = document.getElementById('layer-list');
+  if (!layers.length) { el.innerHTML='<div style="font-size:12px;color:var(--muted);text-align:center;padding:20px">ยังไม่มีข้อมูล Layer</div>'; return; }
+  
+  el.innerHTML = layers.map((l,i) => {
+    const color = layerColors[l.name] || COLORS[i % COLORS.length];
+    layerColors[l.name] = color;
+    return `
+    <div class="layer-card" id="card-${l.name}">
+      <div class="layer-dot" style="background:${color}"></div>
+      <div class="layer-info">
+        <div class="layer-name">${l.name}</div>
+        <div class="layer-count">${l.type}</div>
+      </div>
+      <div class="layer-actions">
+        <button class="icon-btn" title="เพิ่ม Field" onclick="openAddFieldModal('${l.name}')">＋</button>
+        <button class="icon-btn danger" title="ลบ Layer" onclick="confirmDeleteLayer('${l.name}')">🗑</button>
+      </div>
+      <div class="toggle-switch" id="tog-${l.name}" onclick="toggleLayer('${l.name}','${color}')"></div>
+    </div>`;
+  }).join('');
+}
+
+function populateSelects(layers) {
+  ['q-table','export-layer','style-layer'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = layers.map(l => `<option value="${l.name}">${l.name}</option>`).join('');
+  });
+  loadStyleOptions();
+  loadQueryColumns();
+}
+
+async function toggleLayer(name, color) {
+  const tog = document.getElementById(`tog-${name}`);
+  if (activeLayers[name]) {
+    map.removeLayer(activeLayers[name]);
+    delete activeLayers[name];
+    tog.classList.remove('on');
+    return;
+  }
+  try {
+    toast(`⏳ กำลังโหลด ${name}...`);
+    const res = await fetch(`${API_BASE}/layers/${name}/geojson`);
+    const geojson = await res.json();
+    
+    const layer = L.geoJSON(geojson, {
+      style: { color, weight:1.5, fillOpacity:0.35, fillColor:color },
+      pointToLayer: (f,ll) => L.circleMarker(ll,{radius:6,color,fillColor:color,fillOpacity:0.85,weight:1.5}),
+      onEachFeature: (feature, lyr) => {
+        lyr.on('click', () => openPopup(feature, name, lyr));
+      }
+    }).addTo(map);
+    
+    activeLayers[name] = layer;
+    tog.classList.add('on');
+    map.fitBounds(layer.getBounds(), {padding:[40,40]});
+    toast(`✓ โหลดสำเร็จ`);
+  } catch(e) { toast(`✗ โหลดล้มเหลว`); }
+}
+
+function openPopup(feature, tableName, lyr) {
+  const props = feature.properties || {};
+  const rows = Object.entries(props)
+    .filter(([k]) => k !== 'geom')
+    .map(([k,v]) => `<div class="popup-row"><span class="popup-key">${escapeHTML(k)}</span><span class="popup-val">${escapeHTML(v)}</span></div>`)
+    .join('');
+  const html = `<div class="popup-title">📍 ${tableName}</div>${rows}`;
+  lyr.bindPopup(html, {maxWidth:280}).openPopup();
+}
+
+// --- UPLOAD LOGIC (FIXED FOR PYTHON) ---
+function handleFileSelect(event) {
+  pendingFile = event.target.files[0];
+  if (pendingFile) {
+    document.getElementById('selected-file-name').textContent = "ไฟล์ที่เลือก: " + pendingFile.name;
+  }
+}
+
+async function performUpload() {
+  if (!pendingFile) return toast('⚠ กรุณาเลือกไฟล์ก่อน');
+  
+  const formData = new FormData();
+  formData.append('file', pendingFile); // Backend Python รอรับ key ชื่อ 'file'
+
+  try {
+    toast('⏳ กำลังอัปโหลด...');
+    const res = await fetch(`${API_BASE}/upload`, {
+      method: 'POST',
+      body: formData
+    });
+    
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Upload failed');
+    }
+    
+    const data = await res.json();
+    toast(`✓ ${data.message}`);
+    loadLayers(); // รีเฟรชรายการ
+    pendingFile = null;
+    document.getElementById('selected-file-name').textContent = "";
+  } catch (e) {
+    toast('✗ Upload Error: ' + e.message);
+  }
+}
+
+// --- QUERY & BUFFER ---
+async function loadQueryColumns() {
+  const table = document.getElementById('q-table').value;
+  if (!table) return;
+  try {
+    const res = await fetch(`${API_BASE}/layers/${table}/geojson?limit=1`);
+    const data = await res.json();
+    const cols = data.features?.[0] ? Object.keys(data.features[0].properties||{}).filter(k=>k!=='geom'&&k!=='gid') : [];
+    document.getElementById('q-col').innerHTML = cols.map(c=>`<option value="${c}">${c}</option>`).join('');
+  } catch(e) {}
+}
+
+async function runSafeQuery() {
+  const table = document.getElementById('q-table').value;
+  const col   = document.getElementById('q-col').value;
+  const op    = document.getElementById('q-op').value;
+  const val   = document.getElementById('q-val').value;
+  
+  // Construct SQL string carefully (Python backend takes raw SQL for flexibility)
+  // Note: In production, sanitize this more.
+  const sql = `SELECT * FROM "${table}" WHERE "${col}" ${op} '${val}'`;
+
+  try {
+    const res = await fetch(`${API_BASE}/query`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ sql })
+    });
+    const data = await res.json();
+    
+    if (data.features) {
+       const layer = L.geoJSON(data, {
+         style:{color:'#ffd93d',weight:3,fillOpacity:0.5},
+         pointToLayer:(f,ll)=>L.circleMarker(ll,{radius:8,color:'#ffd93d',fillColor:'#ffd93d'})
+       }).addTo(map);
+       tempLayers.push(layer);
+       map.fitBounds(layer.getBounds());
+       toast(`✓ พบ ${data.features.length} รายการ`);
+       showQueryResults(data.features);
+    }
+  } catch(e) { toast('✗ Query Error'); }
+}
+
+function showQueryResults(features) {
+  const el = document.getElementById('query-results');
+  if (!features.length) { el.innerHTML=''; return; }
+  const props = features[0].properties;
+  const cols = Object.keys(props);
+  
+  el.innerHTML = `
+    <div class="section-title" style="margin-top:8px">ผลลัพธ์</div>
+    <div class="results-box" style="max-height:180px;overflow-y:auto">
+      <table><thead><tr>${cols.map(c=>`<th>${escapeHTML(c)}</th>`).join('')}</tr></thead>
+      <tbody>${features.slice(0,50).map(f=>`<tr>${cols.map(c=>`<td>${escapeHTML(f.properties[c])}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table></div>`;
+}
+
+function startBuffer() {
+  bufferMode = true;
+  toast('📍 คลิกบนแผนที่เพื่อสร้าง Buffer');
+}
+
+map.on('click', async e => {
+  if (!bufferMode) return;
+  bufferMode = false;
+  
+  const radius = parseFloat(document.getElementById('buf-radius').value || 1000);
+  
+  // Create Point GeoJSON from Click
+  const pointGeoJSON = {
+      type: "Point",
+      coordinates: [e.latlng.lng, e.latlng.lat]
+  };
+
+  try {
+    toast('⏳ กำลังคำนวณ Buffer...');
+    const res = await fetch(`${API_BASE}/buffer`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+            geojson: pointGeoJSON,
+            distance: radius
+        })
+    });
+    
+    if(!res.ok) throw new Error();
+    const data = await res.json(); // Returns Feature
+    
+    const bufLayer = L.geoJSON(data, {
+        style: {color:'#ff6b6b', weight:2, fillOpacity:0.2, dashArray:'5,5'}
+    }).addTo(map);
+    
+    bufferLayers.push(bufLayer);
+    map.fitBounds(bufLayer.getBounds());
+    toast(`✓ Buffer ${radius}m เรียบร้อย`);
+  } catch(e) { toast('✗ Buffer Failed'); }
+});
+
+function clearTempLayers() {
+  tempLayers.forEach(l=>map.removeLayer(l));
+  bufferLayers.forEach(l=>map.removeLayer(l));
+  tempLayers=[]; bufferLayers=[];
+  document.getElementById('query-results').innerHTML='';
+  toast('🗑 ล้างหน้าจอแล้ว');
+}
+function fitThailand() { map.flyTo([13,101.5],6,{duration:1.2}); }
+
+// --- EXPORT & ADD FIELD ---
+async function exportShapefile() {
+  const layer = document.getElementById('export-layer').value;
+  if (!layer) return toast('⚠ เลือก Layer ก่อน');
+  
+  toast('⏳ กำลังสร้าง Zip...');
+  const a = document.createElement('a');
+  a.href = `${API_BASE}/export/${layer}/shapefile`;
+  a.download = `${layer}_shapefile.zip`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+async function confirmDeleteLayer(name) {
+  if (!confirm(`ลบ layer "${name}" ?`)) return;
+  await fetch(`${API_BASE}/layers/${name}`, { method:'DELETE' });
+  loadLayers();
+  if (activeLayers[name]) { map.removeLayer(activeLayers[name]); delete activeLayers[name]; }
+  toast('✓ ลบเรียบร้อย');
+}
+
+// Add Field Modal
+function openAddFieldModal(table) {
+  document.getElementById('af-table').value = table;
+  document.getElementById('addfield-modal').classList.add('show');
+}
+function closeAddFieldModal() { document.getElementById('addfield-modal').classList.remove('show'); }
+
+async function submitAddField() {
+  const table = document.getElementById('af-table').value;
+  const fieldName = document.getElementById('af-name').value;
+  const fieldType = document.getElementById('af-type').value;
+  
+  try {
+      await fetch(`${API_BASE}/layers/${table}/addfield`, {
+          method: 'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ fieldName, fieldType })
+      });
+      toast('✓ เพิ่ม Field สำเร็จ');
+      closeAddFieldModal();
+  } catch(e) { toast('✗ Error'); }
+}
+
+// --- STYLE LOGIC ---
+async function loadStyleOptions() {
+  const table = document.getElementById('style-layer')?.value;
+  if (!table) return;
+  // Load cols logic... (simplified)
+}
+function applyStyle() {
+  const table = document.getElementById('style-layer')?.value;
+  if (!activeLayers[table]) return;
+  const fill = document.getElementById('s-fill').value;
+  const stroke = document.getElementById('s-stroke').value;
+  const opacity = document.getElementById('s-opacity').value;
+  const weight = document.getElementById('s-weight').value;
+  
+  activeLayers[table].setStyle({
+      fillColor: fill, color: stroke, fillOpacity: opacity, weight: weight
+  });
+}
+function applyAttrStyle() {
+    toast('ℹ Feature นี้ต้องเขียน Logic เพิ่มเติมในอนาคต');
+}
+
+// START
+loadLayers();
+</script>
+</body>
+</html>
