@@ -75,8 +75,9 @@ class AddFieldRequest(BaseModel):
 # Helper: Async DB Connection (ใช้ DATABASE_URL_ASYNC ตัวเดียวจบ)
 async def get_db_connection():
     try:
-        # บน Cloud เราต้องใช้ URL เชื่อมต่อเท่านั้น
-        return await asyncpg.connect(DATABASE_URL_ASYNC)
+        # ใช้ SYNC URL (ที่ไม่มี +asyncpg) แต่ส่งให้ asyncpg.connect ทำงาน
+        # มันจะเข้าใจได้ทันทีครับ
+        return await asyncpg.connect(DATABASE_URL_SYNC) 
     except Exception as e:
         print(f"❌ DB Connection Failed: {e}")
         raise HTTPException(status_code=500, detail=f"Database connection error: {str(e)}")
@@ -189,3 +190,4 @@ if os.path.exists(os.path.join(BASE_DIR, "index.html")):
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=3000, reload=True)
+
