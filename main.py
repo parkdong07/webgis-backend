@@ -21,41 +21,27 @@ from dotenv import load_dotenv
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv()
 
-# ดึงค่า DATABASE_URL จาก Render
-DATABASE_URL = os.environ.get("DATABASE_URL")
+# ดึงค่าจาก Environment Variable (Render จะส่งมาให้)
+RAW_DB_URL = os.environ.get("DATABASE_URL")
 
-if DATABASE_URL:
+if RAW_DB_URL:
     # ✅ MODE: CLOUD (RENDER)
-    # 1. แก้ไข postgres:// ให้เป็น postgresql:// (สำหรับ SQLAlchemy)
-    if DATABASE_URL.startswith("postgres://"):
-        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    # แก้ไข scheme จาก postgres:// เป็น postgresql:// เพื่อให้ SQLAlchemy และ asyncpg ทำงานได้
+    if RAW_DB_URL.startswith("postgres://"):
+        RAW_DB_URL = RAW_DB_URL.replace("postgres://", "postgresql://", 1)
     
-    # 2. เตรียม URL สำหรับ 2 ค่าย
-    # สำหรับ SQLAlchemy (ใช้ทำ PostGIS/Upload)
-    DATABASE_URL_SYNC = DATABASE_URL 
-    # สำหรับ asyncpg (ใช้ดึงข้อมูลแสดงผล)
-    # สำคัญ!! asyncpg ไม่ต้องการ "+asyncpg" ใน URL ให้ใช้ postgresql:// ตรงๆ เลย
-    DATABASE_URL_ASYNC_FOR_DRIVER = DATABASE_URL
-    
-    # URL พิเศษสำหรับ SQLAlchemy Engine (ถ้าต้องการใช้ async driver)
-    DATABASE_URL_ENGINE = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
-    
-    print("🚀 MODE: Cloud Database (Render)")
+    DATABASE_URL_SYNC = RAW_DB_URL
+    print(f"🚀 MODE: Cloud Database Connected")
 else:
     # 🏠 MODE: LOCAL (LOCALHOST)
-    DB_USER = "postgres"
-    DB_PASS = "4721040073"
-    DB_HOST = "localhost"
-    DB_PORT = "5432"
-    DB_NAME = "webgis_db"
-    
-    DATABASE_URL_SYNC = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-    DATABASE_URL_ASYNC_FOR_DRIVER = DATABASE_URL_SYNC
+    # ใช้ค่าในเครื่องคุณ (สำรองไว้กรณีไม่ได้รันบน Render)
+    DATABASE_URL_SYNC = "postgresql://postgres:4721040073@localhost:5432/webgis_db"
     print("🏠 MODE: Local Database (Localhost)")
 
 # --- 2. APP SETUP ---
 app = FastAPI(title="WebGIS Backend")
 
+# ตั้งค่า CORS ให้ Frontend คุยกับ Backend ได้ไม่ติดบล็อก
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -64,72 +50,52 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Engine สำหรับ GeoPandas (ใช้ Sync URL ปกติ)
+# SQLAlchemy Engine (ใช้สำหรับการเขียนข้อมูล/Upload ผ่าน GeoPandas)
 engine = create_engine(DATABASE_URL_SYNC)
 
-# Pydantic Models
-class QueryRequest(BaseModel):
-    sql: str
-
-class BufferRequest(BaseModel):
-    geojson: dict
-    distance: float
-
-class AddFieldRequest(BaseModel):
-    fieldName: str
-    fieldType: str
-
-# Helper: Async DB Connection (แก้จุดที่ทำให้เกิด Error "got postgresql+asyncpg")
+# Helper: Async DB Connection (ใช้สำหรับการดึงข้อมูลมาแสดงผลบนแผนที่)
 async def get_db_connection():
     try:
-        # ใช้ URL ที่ไม่มี "+asyncpg" เพราะ driver asyncpg จัดการเองอยู่แล้ว
-        return await asyncpg.connect(DATABASE_URL_ASYNC_FOR_DRIVER)
+        # asyncpg ต้องการ URL ที่ขึ้นต้นด้วย postgresql:// เท่านั้น (ห้ามมี +asyncpg)
+        return await asyncpg.connect(DATABASE_URL_SYNC)
     except Exception as e:
         print(f"❌ DB Connection Failed: {e}")
         raise HTTPException(status_code=500, detail=f"Database connection error: {str(e)}")
 
-# --- 3. DEBUG & MAIN ROUTES ---
+# --- 3. API ROUTES ---
+
 @app.get("/api/test-db")
 async def test_db():
+    """เช็กว่าต่อ Database ติดไหม"""
     try:
         conn = await get_db_connection()
         version = await conn.fetchval("SELECT version()")
-        postgis = await conn.fetchval("SELECT PostGIS_Full_Version()")
         await conn.close()
-        return {
-            "status": "success", 
-            "db_version": version, 
-            "postgis_version": postgis,
-            "message": "✅ เชื่อมต่อ Database บน Cloud สำเร็จ!"
-        }
+        return {"status": "success", "db_version": version}
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
 @app.get("/api/layers")
 async def get_layers():
+    """ดึงรายชื่อตารางที่มีข้อมูลแผนที่ (PostGIS)"""
     conn = await get_db_connection()
     try:
-        # ดึงรายชื่อ Layer จาก PostGIS
-        query = """
-            SELECT f_table_name as table_name, type as geometry_type 
-            FROM geometry_columns 
-            WHERE f_table_schema = 'public'
-        """
+        query = "SELECT f_table_name, type FROM geometry_columns WHERE f_table_schema = 'public'"
         rows = await conn.fetch(query)
-        return [{"name": row['table_name'], "type": row['geometry_type']} for row in rows]
+        return [{"name": row['f_table_name'], "type": row['type']} for row in rows]
     finally:
         await conn.close()
 
 @app.get("/api/layers/{table}/geojson")
 async def get_layer_geojson(table: str):
+    """แปลงข้อมูลในตารางให้เป็น GeoJSON เพื่อแสดงบน Leaflet"""
     conn = await get_db_connection()
     try:
         query = f"""
             SELECT json_build_object(
                 'type', 'FeatureCollection',
                 'features', COALESCE(json_agg(ST_AsGeoJSON(t.*)::json), '[]')
-            )
-            FROM "{table}" AS t
+            ) FROM "{table}" AS t
         """
         result = await conn.fetchval(query)
         return json.loads(result) if result else {"type": "FeatureCollection", "features": []}
@@ -138,6 +104,7 @@ async def get_layer_geojson(table: str):
 
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
+    """รับไฟล์ Shapefile/Zip แล้วบันทึกลง Database"""
     with tempfile.TemporaryDirectory() as tmpdirname:
         file_path = os.path.join(tmpdirname, file.filename)
         with open(file_path, "wb") as buffer:
@@ -148,22 +115,20 @@ async def upload_file(file: UploadFile = File(...)):
                 with zipfile.ZipFile(file_path, 'r') as zip_ref:
                     zip_ref.extractall(tmpdirname)
                 shp_files = [f for f in os.listdir(tmpdirname) if f.endswith(".shp")]
-                if not shp_files:
-                    raise HTTPException(400, "Zip file must contain a .shp file")
                 read_path = os.path.join(tmpdirname, shp_files[0])
 
             gdf = gpd.read_file(read_path)
             table_name = os.path.splitext(file.filename)[0].replace(" ", "_").lower()
             if gdf.crs is not None:
                 gdf = gdf.to_crs(epsg=4326)
-            
-            # ใช้ engine ที่สร้างจาก SYNC URL
+                            
             gdf.to_postgis(name=table_name, con=engine, if_exists='replace', index=False)
-            return {"message": f"Successfully imported layer: {table_name}", "count": len(gdf)}
+            return {"message": f"Successfully imported: {table_name}"}
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
 # --- 4. STATIC FILES & RUN ---
+# รับใช้ไฟล์หน้าเว็บ index.html
 if os.path.exists(os.path.join(BASE_DIR, "index.html")):
     app.mount("/", StaticFiles(directory=BASE_DIR, html=True), name="static")
 
