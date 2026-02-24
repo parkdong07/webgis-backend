@@ -21,14 +21,14 @@ from dotenv import load_dotenv
 # บังคับใช้ path ของไฟล์ปัจจุบัน เพื่อป้องกันปัญหาหา index.html ไม่เจอ
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # --- Config (ฉบับรองรับ Cloud Render) ---
+# --- Config ---
 load_dotenv()
 
-# 1. ลองอ่านค่า DATABASE_URL (ที่ Render ส่งมาให้)
+# รับค่าจาก Cloud (Render)
 DATABASE_URL = os.getenv("DATABASE_URL") 
 
 if DATABASE_URL:
-    # ✅ กรณีอยู่บน Cloud (Render)
-    # แก้บั๊ก: Render ส่งมาเป็น postgres:// แต่ SQLAlchemy ต้องการ postgresql://
+    # ถ้าอยู่บน Cloud: แก้บั๊ก postgres:// ให้เป็น postgresql://
     if DATABASE_URL.startswith("postgres://"):
         DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
     
@@ -36,12 +36,12 @@ if DATABASE_URL:
     DATABASE_URL_ASYNC = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
 
 else:
-    # 🏠 กรณีรันในเครื่อง (Localhost) - ใช้ค่าเดิมของคุณ
+    # ถ้าอยู่ในเครื่อง: ใช้ค่า Default เดิม
     DB_HOST = os.getenv("DB_HOST", "localhost")
     DB_PORT = os.getenv("DB_PORT", "5432")
     DB_NAME = os.getenv("DB_NAME", "webgis_db")
     DB_USER = os.getenv("DB_USER", "postgres")
-    DB_PASS = os.getenv("DB_PASSWORD", "4721040073") # รหัสผ่านเครื่องคุณ
+    DB_PASS = os.getenv("DB_PASSWORD", "4721040073") # <-- เช็กรหัสผ่านบรรทัดนี้ด้วย
 
     DATABASE_URL_SYNC = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     DATABASE_URL_ASYNC = f"postgresql+asyncpg://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
@@ -308,3 +308,4 @@ else:
 if __name__ == "__main__":
 
     uvicorn.run("main:app", host="0.0.0.0", port=3000, reload=True)
+
