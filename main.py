@@ -25,26 +25,31 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv()
 
 # รับค่าจาก Cloud (Render)
-DATABASE_URL = os.getenv("DATABASE_URL") 
+# --- แก้ไขส่วน Config ใน main.py ---
+import os
+from dotenv import load_dotenv
 
-if DATABASE_URL:
-    # ถ้าอยู่บน Cloud: แก้บั๊ก postgres:// ให้เป็น postgresql://
-    if DATABASE_URL.startswith("postgres://"):
-        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+load_dotenv()
+
+# ดึงค่าจาก Environment Variable ของ Render
+# ใช้ os.environ.get จะชัวร์กว่าในบางกรณีบน Cloud
+db_url = os.environ.get("DATABASE_URL")
+
+if db_url:
+    # ✅ ถ้าเจอค่า (แสดงว่าอยู่บน Render)
+    # แก้ไขรูปแบบ URL ให้ SQLAlchemy ใช้งานได้
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql://", 1)
     
-    DATABASE_URL_SYNC = DATABASE_URL
-    DATABASE_URL_ASYNC = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
-
+    DATABASE_URL_SYNC = db_url
+    DATABASE_URL_ASYNC = db_url.replace("postgresql://", "postgresql+asyncpg://")
+    print("🚀 MODE: Cloud Database (Render)")
 else:
-    # ถ้าอยู่ในเครื่อง: ใช้ค่า Default เดิม
-    DB_HOST = os.getenv("DB_HOST", "localhost")
-    DB_PORT = os.getenv("DB_PORT", "5432")
-    DB_NAME = os.getenv("DB_NAME", "webgis_db")
-    DB_USER = os.getenv("DB_USER", "postgres")
-    DB_PASS = os.getenv("DB_PASSWORD", "4721040073") # <-- เช็กรหัสผ่านบรรทัดนี้ด้วย
-
-    DATABASE_URL_SYNC = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-    DATABASE_URL_ASYNC = f"postgresql+asyncpg://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    # 🏠 ถ้าไม่เจอค่า (แสดงว่ารันในเครื่องตัวเอง)
+    # ใส่ค่า localhost เดิมของคุณ
+    DATABASE_URL_SYNC = "postgresql://postgres:4721040073@localhost:5432/webgis_db"
+    DATABASE_URL_ASYNC = "postgresql+asyncpg://postgres:4721040073@localhost:5432/webgis_db"
+    print("🏠 MODE: Local Database (Localhost)")
 
 # กรณี Cloud บางเจ้าให้มาเป็น URL ยาวๆ บรรทัดเดียว (DATABASE_URL)
 DATABASE_URL_ENV = os.getenv("DATABASE_URL") 
@@ -308,4 +313,5 @@ else:
 if __name__ == "__main__":
 
     uvicorn.run("main:app", host="0.0.0.0", port=3000, reload=True)
+
 
