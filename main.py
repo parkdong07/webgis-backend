@@ -16,7 +16,31 @@ import geopandas as gpd
 from sqlalchemy import create_engine
 import asyncpg
 from dotenv import load_dotenv
+import ssl
 
+# แก้ URL สำหรับ SQLAlchemy
+if RAW_DB_URL:
+    if RAW_DB_URL.startswith("postgres://"):
+        RAW_DB_URL = RAW_DB_URL.replace("postgres://", "postgresql://", 1)
+    DATABASE_URL_SYNC = RAW_DB_URL
+else:
+    DATABASE_URL_SYNC = "postgresql://postgres:xxxx@localhost:5432/webgis_db"
+
+# SQLAlchemy Engine พร้อม SSL
+engine = create_engine(
+    DATABASE_URL_SYNC,
+    connect_args={"sslmode": "require"}  # เพิ่มบรรทัดนี้
+)
+
+# asyncpg พร้อม SSL
+async def get_db_connection():
+    try:
+        return await asyncpg.connect(
+            dsn=DATABASE_URL_SYNC,
+            ssl='require'  # เพิ่มบรรทัดนี้
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 # --- 1. CONFIGURATION ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv()
@@ -134,3 +158,4 @@ if os.path.exists(os.path.join(BASE_DIR, "index.html")):
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=3000)
+
